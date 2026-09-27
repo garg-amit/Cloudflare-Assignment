@@ -15,22 +15,27 @@ function handleRequest(request) {
     return new Response('Not found', { status: 404 })
   }
 
-  return new Response(request.method === 'HEAD' ? null : APP_HTML, {
+  const nonce = crypto.randomUUID().replace(/-/g, '')
+  const body = request.method === 'HEAD' ? null : APP_HTML.replace('<script>', '<script nonce="' + nonce + '">')
+  return new Response(body, {
     headers: {
       'content-type': 'text/html; charset=UTF-8',
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'no-referrer',
       'content-security-policy':
-        "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'self'",
+        "default-src 'self'; style-src 'unsafe-inline'; script-src 'nonce-" + nonce + "'; img-src 'self' data:; base-uri 'none'; form-action 'self'",
     },
   })
 }
 
+const KCAL_PER_KG = 7700
+
+// Estimates calories and macros from metric profile values using Mifflin-St Jeor and returns daily target values.
 function calculateTargets(profile) {
   const base = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + (profile.sex === 'male' ? 5 : -161)
   const maintenance = base * Number(profile.activity)
-  const requestedDeficit = profile.goalKg * 7700 / Math.max(1, profile.goalDays)
+  const requestedDeficit = profile.goalKg * KCAL_PER_KG / Math.max(1, profile.goalDays)
   const minimum = profile.sex === 'male' ? 1500 : 1200
   const budget = Math.max(minimum, maintenance - requestedDeficit)
   const protein = profile.weight * 1.6
@@ -224,8 +229,29 @@ const APP_HTML = `<!doctype html>
     try { state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultState() } catch (_) { state = defaultState() }
     if (!state.profile || !state.days) state = defaultState()
 
-    ${calculateTargets.toString()}
-    ${calculateTotals.toString()}
+    const KCAL_PER_KG = 7700
+
+    function calculateTargets(profile) {
+      const base = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + (profile.sex === 'male' ? 5 : -161)
+      const maintenance = base * Number(profile.activity)
+      const requestedDeficit = profile.goalKg * KCAL_PER_KG / Math.max(1, profile.goalDays)
+      const minimum = profile.sex === 'male' ? 1500 : 1200
+      const budget = Math.max(minimum, maintenance - requestedDeficit)
+      const protein = profile.weight * 1.6
+      const fat = Math.max(profile.weight * 0.7, budget * 0.25 / 9)
+      const carbs = Math.max(0, (budget - protein * 4 - fat * 9) / 4)
+      return { maintenance, requestedDeficit, actualDeficit: maintenance - budget, budget, protein, carbs, fat, minimum }
+    }
+
+    function calculateTotals(meals) {
+      return meals.reduce((sum, meal) => {
+        sum.protein += meal.protein
+        sum.carbs += meal.carbs
+        sum.fat += meal.fat
+        sum.calories += meal.protein * 4 + meal.carbs * 4 + meal.fat * 9
+        return sum
+      }, { protein: 0, carbs: 0, fat: 0, calories: 0 })
+    }
 
     const dayKey = () => {
       const now = new Date()
@@ -246,7 +272,7 @@ const APP_HTML = `<!doctype html>
     }
 
     function setBar(name, consumed, target) {
-      $(name + 'Bar').style.width = Math.min(100, consumed / target * 100 || 0) + '%'
+      $(name + 'Bar').style.width = (target > 0 ? Math.min(100, consumed / target * 100) : 0) + '%'
       $(name + 'Value').textContent = round(consumed) + ' / ' + round(target) + 'g'
     }
 
@@ -339,7 +365,7 @@ const APP_HTML = `<!doctype html>
     $('profileForm').addEventListener('input', () => {
       const form = $('profileForm')
       const days = number(form.elements.goalDays.value)
-      const deficit = days > 0 ? number(form.elements.goalKg.value) * 7700 / days : 0
+      const deficit = days > 0 ? number(form.elements.goalKg.value) * KCAL_PER_KG / days : 0
       const warning = $('warning')
       warning.style.display = deficit > 1000 ? 'block' : 'none'
       warning.textContent = 'This goal requires about ' + round(deficit) + ' kcal of deficit per day. The displayed budget will not go below a general minimum, and professional guidance is recommended.'

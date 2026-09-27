@@ -32,4 +32,7 @@ Promise.all([
   assert.equal(method.status, 405)
   assert.equal(method.headers.get('allow'), 'GET, HEAD')
   assert.equal(missing.status, 404)
+}).catch(error => {
+  console.error(error)
+  process.exitCode = 1
 })
