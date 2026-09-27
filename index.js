@@ -1,15 +1,21 @@
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request))
-})
+if (typeof addEventListener === 'function') {
+  addEventListener('fetch', event => {
+    event.respondWith(handleRequest(event.request))
+  })
+}
 
 function handleRequest(request) {
   const url = new URL(request.url)
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
+  }
 
   if (url.pathname !== '/') {
     return new Response('Not found', { status: 404 })
   }
 
-  return new Response(APP_HTML, {
+  return new Response(request.method === 'HEAD' ? null : APP_HTML, {
     headers: {
       'content-type': 'text/html; charset=UTF-8',
       'cache-control': 'no-store',
@@ -19,6 +25,28 @@ function handleRequest(request) {
         "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'self'",
     },
   })
+}
+
+function calculateTargets(profile) {
+  const base = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + (profile.sex === 'male' ? 5 : -161)
+  const maintenance = base * Number(profile.activity)
+  const requestedDeficit = profile.goalKg * 7700 / Math.max(1, profile.goalDays)
+  const minimum = profile.sex === 'male' ? 1500 : 1200
+  const budget = Math.max(minimum, maintenance - requestedDeficit)
+  const protein = profile.weight * 1.6
+  const fat = Math.max(profile.weight * 0.7, budget * 0.25 / 9)
+  const carbs = Math.max(0, (budget - protein * 4 - fat * 9) / 4)
+  return { maintenance, requestedDeficit, actualDeficit: maintenance - budget, budget, protein, carbs, fat, minimum }
+}
+
+function calculateTotals(meals) {
+  return meals.reduce((sum, meal) => {
+    sum.protein += meal.protein
+    sum.carbs += meal.carbs
+    sum.fat += meal.fat
+    sum.calories += meal.protein * 4 + meal.carbs * 4 + meal.fat * 9
+    return sum
+  }, { protein: 0, carbs: 0, fat: 0, calories: 0 })
 }
 
 const APP_HTML = `<!doctype html>
@@ -196,34 +224,25 @@ const APP_HTML = `<!doctype html>
     try { state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultState() } catch (_) { state = defaultState() }
     if (!state.profile || !state.days) state = defaultState()
 
-    const today = new Date().toISOString().slice(0, 10)
-    const meals = () => state.days[today] || []
+    ${calculateTargets.toString()}
+    ${calculateTotals.toString()}
+
+    const dayKey = () => {
+      const now = new Date()
+      return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
+    }
+    const meals = () => state.days[dayKey()] || []
     const number = value => Math.max(0, Number(value) || 0)
     const round = value => Math.round(value)
     const $ = id => document.getElementById(id)
     const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
 
     function targets() {
-      const p = state.profile
-      const base = 10 * p.weight + 6.25 * p.height - 5 * p.age + (p.sex === 'male' ? 5 : -161)
-      const maintenance = base * Number(p.activity)
-      const requestedDeficit = p.goalKg * 7700 / Math.max(1, p.goalDays)
-      const minimum = p.sex === 'male' ? 1500 : 1200
-      const budget = Math.max(minimum, maintenance - requestedDeficit)
-      const protein = p.weight * 1.6
-      const fat = Math.max(p.weight * 0.7, budget * 0.25 / 9)
-      const carbs = Math.max(0, (budget - protein * 4 - fat * 9) / 4)
-      return { maintenance, requestedDeficit, actualDeficit: maintenance - budget, budget, protein, carbs, fat, minimum }
+      return calculateTargets(state.profile)
     }
 
     function totals() {
-      return meals().reduce((sum, meal) => {
-        sum.protein += meal.protein
-        sum.carbs += meal.carbs
-        sum.fat += meal.fat
-        sum.calories += meal.protein * 4 + meal.carbs * 4 + meal.fat * 9
-        return sum
-      }, { protein: 0, carbs: 0, fat: 0, calories: 0 })
+      return calculateTotals(meals())
     }
 
     function setBar(name, consumed, target) {
@@ -273,7 +292,7 @@ const APP_HTML = `<!doctype html>
         remove.setAttribute('aria-label', 'Remove ' + meal.name)
         remove.textContent = '×'
         remove.addEventListener('click', () => {
-          state.days[today] = meals().filter(item => item.id !== meal.id)
+          state.days[dayKey()] = meals().filter(item => item.id !== meal.id)
           save()
           render()
         })
@@ -287,7 +306,6 @@ const APP_HTML = `<!doctype html>
       Object.keys(state.profile).forEach(key => { if (form.elements[key]) form.elements[key].value = state.profile[key] })
     }
 
-    $('date').textContent = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())
     $('openMeal').addEventListener('click', () => $('mealDialog').showModal())
     $('openProfile').addEventListener('click', () => { populateProfile(); $('profileDialog').showModal() })
     document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $(button.dataset.close).close()))
@@ -295,10 +313,10 @@ const APP_HTML = `<!doctype html>
     $('mealForm').addEventListener('submit', event => {
       event.preventDefault()
       const data = new FormData(event.currentTarget)
-      const meal = { id: Date.now(), name: String(data.get('name')).trim(), protein: number(data.get('protein')), carbs: number(data.get('carbs')), fat: number(data.get('fat')) }
+      const meal = { id: crypto.randomUUID(), name: String(data.get('name')).trim(), protein: number(data.get('protein')), carbs: number(data.get('carbs')), fat: number(data.get('fat')) }
       if (!meal.name) return
-      if (!state.days[today]) state.days[today] = []
-      state.days[today].push(meal)
+      if (!state.days[dayKey()]) state.days[dayKey()] = []
+      state.days[dayKey()].push(meal)
       save()
       event.currentTarget.reset()
       $('mealDialog').close()
@@ -328,8 +346,13 @@ const APP_HTML = `<!doctype html>
     })
 
     populateProfile()
+    $('date').textContent = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())
     render()
     if (!localStorage.getItem(STORAGE_KEY)) $('profileDialog').showModal()
   </script>
 </body>
 </html>`
+
+if (typeof module !== 'undefined') {
+  module.exports = { calculateTargets, calculateTotals, handleRequest }
+}
