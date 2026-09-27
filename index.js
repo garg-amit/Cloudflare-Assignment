@@ -37,6 +37,7 @@ function calculateTargets(profile) {
   const maintenance = base * Number(profile.activity)
   const goalDays = Math.max(1, Number(profile.goalDays) || 1)
   const requestedDeficit = (Number(profile.goalKg) || 0) * KCAL_PER_KG / goalDays
+  // Conservative general-wellness defaults; these are estimates, not clinical prescriptions.
   const minimum = profile.sex === 'male' ? 1500 : 1200
   const budget = Math.max(minimum, maintenance - requestedDeficit)
   const protein = profile.weight * 1.6
@@ -47,10 +48,13 @@ function calculateTargets(profile) {
 
 function calculateTotals(meals) {
   return meals.reduce((sum, meal) => {
-    sum.protein += meal.protein
-    sum.carbs += meal.carbs
-    sum.fat += meal.fat
-    sum.calories += meal.protein * 4 + meal.carbs * 4 + meal.fat * 9
+    const protein = Math.max(0, Number(meal.protein) || 0)
+    const carbs = Math.max(0, Number(meal.carbs) || 0)
+    const fat = Math.max(0, Number(meal.fat) || 0)
+    sum.protein += protein
+    sum.carbs += carbs
+    sum.fat += fat
+    sum.calories += protein * 4 + carbs * 4 + fat * 9
     return sum
   }, { protein: 0, carbs: 0, fat: 0, calories: 0 })
 }
@@ -247,10 +251,13 @@ const APP_HTML = `<!doctype html>
 
     function calculateTotals(meals) {
       return meals.reduce((sum, meal) => {
-        sum.protein += meal.protein
-        sum.carbs += meal.carbs
-        sum.fat += meal.fat
-        sum.calories += meal.protein * 4 + meal.carbs * 4 + meal.fat * 9
+        const protein = Math.max(0, Number(meal.protein) || 0)
+        const carbs = Math.max(0, Number(meal.carbs) || 0)
+        const fat = Math.max(0, Number(meal.fat) || 0)
+        sum.protein += protein
+        sum.carbs += carbs
+        sum.fat += fat
+        sum.calories += protein * 4 + carbs * 4 + fat * 9
         return sum
       }, { protein: 0, carbs: 0, fat: 0, calories: 0 })
     }
@@ -370,7 +377,7 @@ const APP_HTML = `<!doctype html>
       const deficit = days > 0 ? number(form.elements.goalKg.value) * KCAL_PER_KG / days : 0
       const warning = $('warning')
       warning.style.display = deficit > 1000 ? 'block' : 'none'
-      warning.textContent = 'This goal requires about ' + round(deficit) + ' kcal of deficit per day. The displayed budget will not go below a general minimum, and professional guidance is recommended.'
+      warning.textContent = deficit > 1000 ? 'This goal requires about ' + round(deficit) + ' kcal of deficit per day. The displayed budget will not go below a general minimum, and professional guidance is recommended.' : ''
     })
 
     populateProfile()

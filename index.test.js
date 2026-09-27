@@ -28,6 +28,7 @@ assert.deepEqual(calculateTotals([
   { protein: 20, carbs: 30, fat: 10 },
   { protein: 5, carbs: 10, fat: 2 },
 ]), { protein: 25, carbs: 40, fat: 12, calories: 368 })
+assert.deepEqual(calculateTotals([{ protein: '10', carbs: undefined, fat: -3 }]), { protein: 10, carbs: 0, fat: 0, calories: 40 })
 
 Promise.all([
   handleRequest(new Request('https://example.com/')),
@@ -41,7 +42,9 @@ Promise.all([
   const clientScript = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1]
   assert.doesNotThrow(() => new vm.Script(clientScript))
   const clientContext = {}
-  const clientModel = clientScript.match(/const KCAL_PER_KG[\s\S]*?(?=    const dayKey)/)[0]
+  const clientModelMatch = clientScript.match(/const KCAL_PER_KG[\s\S]*?(?=\s+const dayKey)/)
+  assert.ok(clientModelMatch, 'Client calculation model should be present')
+  const clientModel = clientModelMatch[0]
   vm.runInNewContext(clientModel + '\nresult = calculateTargets(' + JSON.stringify(profile) + ')', clientContext)
   assert.equal(Math.round(clientContext.result.maintenance), Math.round(target.maintenance))
   assert.equal(method.status, 405)
