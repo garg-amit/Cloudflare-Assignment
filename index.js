@@ -27,6 +27,9 @@ const APP_HTML = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#16211a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Daily Balance">
   <title>Daily Balance</title>
   <style>
     :root {
@@ -68,7 +71,7 @@ const APP_HTML = `<!doctype html>
     .kcal-label, .subtle { color: #bdc8c0; font-size: .8rem; }
     .ring {
       align-items: center; background: conic-gradient(var(--orange) var(--progress, 0%), #39463d 0);
-      border-radius: 50%; display: flex; height: 88px; justify-content: center; width: 88px;
+      border-radius: 50%; display: flex; height: 88px; justify-content: center; position: relative; width: 88px;
     }
     .ring:before { background: var(--ink); border-radius: 50%; content: ""; height: 68px; width: 68px; }
     .ring span { font-size: .75rem; font-weight: 700; position: absolute; }
@@ -188,10 +191,10 @@ const APP_HTML = `<!doctype html>
 
   <script>
     const STORAGE_KEY = 'daily-balance-v1'
-    const defaults = { profile: { weight: 75, height: 175, age: 30, sex: 'male', activity: 1.375, goalKg: 5, goalDays: 30 }, days: {} }
+    const defaultState = () => ({ profile: { weight: 75, height: 175, age: 30, sex: 'male', activity: 1.375, goalKg: 5, goalDays: 30 }, days: {} })
     let state
-    try { state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaults } catch (_) { state = defaults }
-    if (!state.profile || !state.days) state = defaults
+    try { state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultState() } catch (_) { state = defaultState() }
+    if (!state.profile || !state.days) state = defaultState()
 
     const today = new Date().toISOString().slice(0, 10)
     const meals = () => state.days[today] || []
@@ -204,7 +207,7 @@ const APP_HTML = `<!doctype html>
       const p = state.profile
       const base = 10 * p.weight + 6.25 * p.height - 5 * p.age + (p.sex === 'male' ? 5 : -161)
       const maintenance = base * Number(p.activity)
-      const requestedDeficit = p.goalKg * 7700 / p.goalDays
+      const requestedDeficit = p.goalKg * 7700 / Math.max(1, p.goalDays)
       const minimum = p.sex === 'male' ? 1500 : 1200
       const budget = Math.max(minimum, maintenance - requestedDeficit)
       const protein = p.weight * 1.6
@@ -317,7 +320,8 @@ const APP_HTML = `<!doctype html>
 
     $('profileForm').addEventListener('input', () => {
       const form = $('profileForm')
-      const deficit = number(form.elements.goalKg.value) * 7700 / number(form.elements.goalDays.value)
+      const days = number(form.elements.goalDays.value)
+      const deficit = days > 0 ? number(form.elements.goalKg.value) * 7700 / days : 0
       const warning = $('warning')
       warning.style.display = deficit > 1000 ? 'block' : 'none'
       warning.textContent = 'This goal requires about ' + round(deficit) + ' kcal of deficit per day. The displayed budget will not go below a general minimum, and professional guidance is recommended.'
