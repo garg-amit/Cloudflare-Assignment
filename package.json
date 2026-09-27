@@ -2,10 +2,10 @@
   "private": true,
   "name": "worker",
   "version": "1.0.0",
-  "description": "A template for kick starting a Cloudflare Workers project",
+  "description": "A mobile-first calorie and macro tracker for Cloudflare Workers",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --check index.js",
     "format": "prettier --write '**/*.{js,css,json,md}'"
   },
   "author": "Kristian Freeman <kristian@kristianfreeman.com>",
