@@ -266,7 +266,7 @@ const APP_HTML = `<!doctype html>
       const now = new Date()
       return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
     }
-    const meals = () => state.days[dayKey()] || []
+    const meals = () => Array.isArray(state.days[dayKey()]) ? state.days[dayKey()] : []
     const number = value => Math.max(0, Number(value) || 0)
     const round = value => Math.round(value)
     const $ = id => document.getElementById(id)
