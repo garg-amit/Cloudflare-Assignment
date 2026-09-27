@@ -10,6 +10,9 @@
   },
   "author": "Kristian Freeman <kristian@kristianfreeman.com>",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "prettier": "^1.18.2"
   },

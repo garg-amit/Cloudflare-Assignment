@@ -16,7 +16,7 @@ function handleRequest(request) {
   }
 
   const nonce = crypto.randomUUID().replace(/-/g, '')
-  const body = request.method === 'HEAD' ? null : APP_HTML.replace('<script>', '<script nonce="' + nonce + '">')
+  const body = request.method === 'HEAD' ? null : APP_HTML.replace('__NONCE__', nonce)
   return new Response(body, {
     headers: {
       'content-type': 'text/html; charset=UTF-8',
@@ -24,7 +24,7 @@ function handleRequest(request) {
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'no-referrer',
       'content-security-policy':
-        "default-src 'self'; style-src 'unsafe-inline'; script-src 'nonce-" + nonce + "'; img-src 'self' data:; base-uri 'none'; form-action 'self'",
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'nonce-" + nonce + "'; img-src 'self' data:; base-uri 'none'; form-action 'self'",
     },
   })
 }
@@ -35,7 +35,8 @@ const KCAL_PER_KG = 7700
 function calculateTargets(profile) {
   const base = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + (profile.sex === 'male' ? 5 : -161)
   const maintenance = base * Number(profile.activity)
-  const requestedDeficit = profile.goalKg * KCAL_PER_KG / Math.max(1, profile.goalDays)
+  const goalDays = Math.max(1, Number(profile.goalDays) || 1)
+  const requestedDeficit = (Number(profile.goalKg) || 0) * KCAL_PER_KG / goalDays
   const minimum = profile.sex === 'male' ? 1500 : 1200
   const budget = Math.max(minimum, maintenance - requestedDeficit)
   const protein = profile.weight * 1.6
@@ -222,7 +223,7 @@ const APP_HTML = `<!doctype html>
     </form>
   </dialog>
 
-  <script>
+  <script nonce="__NONCE__">
     const STORAGE_KEY = 'daily-balance-v1'
     const defaultState = () => ({ profile: { weight: 75, height: 175, age: 30, sex: 'male', activity: 1.375, goalKg: 5, goalDays: 30 }, days: {} })
     let state
@@ -234,7 +235,8 @@ const APP_HTML = `<!doctype html>
     function calculateTargets(profile) {
       const base = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + (profile.sex === 'male' ? 5 : -161)
       const maintenance = base * Number(profile.activity)
-      const requestedDeficit = profile.goalKg * KCAL_PER_KG / Math.max(1, profile.goalDays)
+      const goalDays = Math.max(1, Number(profile.goalDays) || 1)
+      const requestedDeficit = (Number(profile.goalKg) || 0) * KCAL_PER_KG / goalDays
       const minimum = profile.sex === 'male' ? 1500 : 1200
       const budget = Math.max(minimum, maintenance - requestedDeficit)
       const protein = profile.weight * 1.6
@@ -280,7 +282,7 @@ const APP_HTML = `<!doctype html>
       const goal = targets()
       const total = totals()
       const remaining = goal.budget - total.calories
-      const progress = Math.min(100, total.calories / goal.budget * 100 || 0)
+      const progress = goal.budget > 0 ? Math.min(100, total.calories / goal.budget * 100) : 0
       $('remaining').textContent = round(remaining)
       $('remaining').style.color = remaining < 0 ? '#ff968a' : 'white'
       $('budget').textContent = round(goal.budget) + ' kcal'
